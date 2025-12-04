@@ -1,4 +1,4 @@
-package chi
+package chii
 
 import (
 	"log/slog"
