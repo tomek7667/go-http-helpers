@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"time"
 )
 
 func ResErr(w http.ResponseWriter, err error) {
-	slog.Error("someone got an error from api", "err", err)
+	_, file, line, _ := runtime.Caller(1)
+	slog.Error(
+		"someone got an error from api",
+		"err", err,
+		"source", fmt.Sprintf("%s:%d", file, line),
+	)
 	resjson(w, nil, err.Error(), http.StatusInternalServerError)
 }
 
