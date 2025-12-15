@@ -42,10 +42,9 @@ func ResErr(w http.ResponseWriter, err error) {
 // getCleanStack returns a formatted string of the stack trace,
 // filtering out noisy Go runtime and server internals.
 func getCleanStack() string {
-	// We allocate a buffer for the program counters (PCs)
 	pc := make([]uintptr, 32)
-	// Skip 3 frames: runtime.Callers, getCleanStack, ResErr
-	n := runtime.Callers(3, pc)
+	// Skip 2 frames: runtime.Callers + getCleanStack
+	n := runtime.Callers(2, pc)
 	frames := runtime.CallersFrames(pc[:n])
 
 	var builder strings.Builder
@@ -53,9 +52,7 @@ func getCleanStack() string {
 	for {
 		frame, more := frames.Next()
 
-		// --- FILTERING LOGIC ---
-
-		// 1. Skip Go Runtime internals (runtime/...)
+		// 1. Filter out Go runtime internals
 		if strings.Contains(frame.File, "runtime/") {
 			if !more {
 				break
@@ -64,28 +61,29 @@ func getCleanStack() string {
 		}
 
 		// 2. Stop when we hit the generic HTTP server guts
-		// (This cuts off the massive bottom half of your original log)
-		if strings.Contains(frame.Func.Name(), "net/http.HandlerFunc.ServeHTTP") ||
-			strings.Contains(frame.Func.Name(), "net/http.serverHandler.ServeHTTP") {
+		// This prevents the massive log tail
+		if strings.Contains(frame.Function, "net/http.HandlerFunc.ServeHTTP") ||
+			strings.Contains(frame.Function, "net/http.serverHandler.ServeHTTP") {
 			break
 		}
 
-		// 3. Optional: Make library paths shorter (remove version hash noise)
-		// e.g. "go/pkg/mod/github.com/..." -> "github.com/..."
+		// 3. Cleanup File Path (Relative or shorten go mod paths)
 		cleanFile := frame.File
-		if idx := strings.Index(frame.File, "go/pkg/mod/"); idx != -1 {
-			cleanFile = frame.File[idx+11:] // Keep path after mod/
+		// Remove messy go/pkg/mod/ prefix
+		if idx := strings.Index(cleanFile, "go/pkg/mod/"); idx != -1 {
+			cleanFile = cleanFile[idx+11:]
 		} else {
-			// Try to make project files relative
+			// Make project files relative to current working directory
 			if wd, err := os.Getwd(); err == nil {
-				if rel, err := filepath.Rel(wd, frame.File); err == nil {
+				if rel, err := filepath.Rel(wd, cleanFile); err == nil {
 					cleanFile = rel
 				}
 			}
 		}
 
-		// Append to output
-		builder.WriteString(fmt.Sprintf("\n\t%s\n\t\t%s:%d", frame.Func, cleanFile, frame.Line))
+		// 4. Format the output
+		// FIX: Use frame.Function (string) instead of frame.Func (pointer)
+		builder.WriteString(fmt.Sprintf("\n%s\n\t%s:%d", frame.Function, cleanFile, frame.Line))
 
 		if !more {
 			break
