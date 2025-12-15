@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"runtime/debug"
 	"time"
 )
 
@@ -15,6 +16,11 @@ func ResErr(w http.ResponseWriter, err error) {
 		"someone got an error from api",
 		"err", err,
 		"source", fmt.Sprintf("%s:%d", file, line),
+	)
+	slog.Debug(
+		"someone got an error from api- debug stack tree",
+		"err", err,
+		"trace", string(debug.Stack()),
 	)
 	resjson(w, nil, err.Error(), http.StatusInternalServerError)
 }
